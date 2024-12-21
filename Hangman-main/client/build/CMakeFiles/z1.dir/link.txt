@@ -1,0 +1,1 @@
+/usr/bin/c++ -g CMakeFiles/z1.dir/z1_autogen/mocs_compilation.cpp.o CMakeFiles/z1.dir/main.cpp.o CMakeFiles/z1.dir/mywidget.cpp.o -o z1  /usr/lib64/libQt6Widgets.so.6.6.3 /usr/lib64/libQt6Network.so.6.6.3 /usr/lib64/libQt6Gui.so.6.6.3 /usr/lib64/libGLX.so /usr/lib64/libOpenGL.so /usr/lib64/libQt6Core.so.6.6.3 
