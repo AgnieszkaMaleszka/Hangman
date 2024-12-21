@@ -1,7 +1,13 @@
-Uruchomienie: 
-zbudowanie programu serwera make 
-uruchomienie ./wisielec.out
-Opis:
+# Gra wisielec 
+### Bartosz Kozłowski [155869]  Agnieszka Maleszka [155941]
+
+**Uruchomienie:**
+
+* kompilacja programu serwera - make
+* uruchomienie ./wisielec.out
+  
+**Opis:**
+
 Gracz łączy się z serwerem i wysyła swój unikalny nick. Jeśli wybrany nick jest już zajęty, serwer prosi o wybór innego.
 Po zaakceptowaniu nicku, gracz trafia do menu, gdzie może dołączyć do gry — w danym momencie istnieje tylko jeden pokój, do którego wszyscy mogą dołączyć.
 W pokoju gry widoczna jest lista aktywnych graczy, ich wisielców oraz dotychczas zdobyte punkty.
