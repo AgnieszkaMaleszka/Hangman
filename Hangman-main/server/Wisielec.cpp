@@ -512,4 +512,3 @@ int runMainLoop() {
     close(epollFd);
     return 1;
 }
-
