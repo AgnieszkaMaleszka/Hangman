@@ -1,5 +1,0 @@
-/home/aga/Downloads/Hangman-main/client/build/CMakeFiles/z1.dir
-/home/aga/Downloads/Hangman-main/client/build/CMakeFiles/edit_cache.dir
-/home/aga/Downloads/Hangman-main/client/build/CMakeFiles/rebuild_cache.dir
-/home/aga/Downloads/Hangman-main/client/build/CMakeFiles/z1_autogen_timestamp_deps.dir
-/home/aga/Downloads/Hangman-main/client/build/CMakeFiles/z1_autogen.dir
