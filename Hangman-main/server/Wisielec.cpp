@@ -99,7 +99,7 @@ void setNewPassword() {
     int num = rand() % topicsNumber;
     topic = topics[num];
 
-    ifstream file(topic + ".txt");
+    ifstream file("topics/" + topic + ".txt");
     if (!file) {
         cerr << "Nie można otworzyć pliku: " << topic << ".txt" << endl;
         return;
@@ -151,7 +151,7 @@ void deletePlayer(int epollFd, int clientFd) {
     close(clientFd);
     epoll_ctl(epollFd, EPOLL_CTL_DEL, clientFd, nullptr);
     nicknames.erase(players[clientFd].nickname);
-    broadcast("Gracz " + players[clientFd].nickname + " rozlaczyl sie.\n", clientFd, 0);
+    broadcast("Gracz " + players[clientFd].nickname + " rozłączył się.\n", clientFd, 0);
     // jezeli gracz ktory sie rozlaczyl byl w rozgrywce lub na nia oczekiwal zmniejszam liczbe aktywnych (gotowych do rozgrywki) graczy
     if (players[clientFd].playerStatus != 2) {
         activePlayers--;
@@ -213,7 +213,7 @@ void timeEnded() {
         }else {
             startGame = false;
             //przekierowanie graczy do poczekalni
-            message = "Witaj w poczekalni, oczekujemy az dolaczy jeszcze jeden gracz\n";
+            message = "Witaj w poczekalni, oczekujemy aż dołączy jeszcze jeden gracz!\n";
             broadcast(message, -1, 6);
         }
 }
@@ -249,7 +249,7 @@ void updatePassword(char ans, int fd) {
     ans=toupper(ans);
     //sprawdzamy czy gracz zgadywal juz dana litere
     if (players[fd].usedChars[ans-'A']) {
-        string message = "0; sprawdzales juz ta litere!\n;";
+        string message = "0; sprawdzałeś/aś już tę literę!\n;";
         send(fd, message.c_str(), message.size(), 0);
         return;
     }
@@ -354,9 +354,9 @@ void handleClientInput(int clientFd, const string &input) {
                 lastTime = chrono::steady_clock::now();
                 startGame = true;
             }else if (startGame) {
-                message = "6;Witaj aktualnie trwa gra, poczekaj az sie zakonczy\n;";
+                message = "6;Witaj aktualnie trwa gra, poczekaj aż się zakończy.\n;";
             }else {
-                message = "6;Witaj w poczeklani, oczekujemy na rozpoczecie gry\n;";
+                message = "6;Witaj w poczekalni, oczekujemy na rozpoczęcie gry.\n;";
             }
             int n = send(clientFd, message.c_str(), message.size(), 0);
             if (n==-1) {
@@ -371,13 +371,13 @@ void handleClientInput(int clientFd, const string &input) {
                 updatePassword(input[0], clientFd);
             }else {
                 if (!startGame) {
-                    string message = "0;Gra nierozpoczeta\n;";
+                    string message = "0;Gra nierozpoczęta.\n;";
                     int n = send(clientFd, message.c_str(), message.size(), 0);
                     if (n==-1) {
                         perror("send handleClientInput: ");
                     }
                 }else if (!players[clientFd].playerStatus){
-                    string message = "0;Poczekaj na zakonczenie aktualnej rozgrywki\n;";
+                    string message = "0;Poczekaj na zakończenie aktualnej rozgrywki.\n;";
                     int n = send(clientFd, message.c_str(), message.size(), 0);
                     if (n==-1) {
                         perror("send handleClientInput: ");
