@@ -2,10 +2,36 @@
 ### Bartosz Kozłowski [155869]  Agnieszka Maleszka [155941]
 
 **Uruchomienie:**
+1. **Przejdź do katalogu projektu:**
+   ```bash
+   cd Hangman-main
+   ```
+2. **Utworzenie katalogu build:**
+   ```bash
+   mkdir build
+   cd build
+   ```
+3. **Generowanie plików za pomocą Cmake i zbudowanie proejtku**
+  ```bash
+  cmake ..
+  cmake --build .
+  ```
+5. **Uruchomienie serwera i klienta **
+   * klient
+     ```bash
+     cd client
+     ./client
+     ```
+   * serwer
+     ```bash
+     cd serwer
+     ./serwer
 
-* kompilacja programu serwera - make
-* uruchomienie ./wisielec.out
-  
+**Wymagania:**
+
+* g++ wersja 10.x.x
+* c++ wersja 10.x.x
+
 **Opis:**
 
 Gracz łączy się z serwerem i wysyła swój unikalny nick. Jeśli wybrany nick jest już zajęty, serwer prosi o wybór innego.
