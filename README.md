@@ -16,7 +16,7 @@
   cmake ..
   cmake --build .
   ```
-5. **Uruchomienie serwera i klienta **
+5. **Uruchomienie serwera i klienta**
    * klient
      ```bash
      cd client
