@@ -56,7 +56,7 @@ void setNonBlocking(int fd) {
 // 02 - odeslanie do klienta nicku zaakceptowanego przez serwer
 void broadcast(const string &message, int excludeFd, int flag) {
     //wiadomosc jest w formacie flag;message;
-    string formattedMessage = to_string(flag) + ";" + message + ";";
+    string formattedMessage = to_string(flag) + ";" + message + "&";
     for (const auto &pair : players) {
         if (pair.first != excludeFd) {
             int n = send(pair.first, formattedMessage.c_str(), formattedMessage.size(), 0);
@@ -89,7 +89,7 @@ void createScoreBoard() {
 void resetPassword(int fd) {
     players[fd].password = string(pass.size(), '-');
     players[fd].hangman = 0;
-    string message = "2;" +topic +"\n"+ players[fd].password + "\n;";
+    string message = "2;" +topic +"\n"+ players[fd].password + "\n&";
     send(fd, message.c_str(), message.size(), 0);
 }
 // Funkcja losujaca haslo dla pokoju, ustawia rowniez kategorie dla hasla
@@ -120,7 +120,6 @@ void setNewPassword() {
         bonus = pass.size();
     } else {
         cerr << "Brak haseł w pliku: " << topic << ".txt" << endl;
-        pass = "";
     }
 }
 
@@ -140,7 +139,7 @@ void resetGame() {
                 pair.second.usedChars[i] = false;
             }
             resetPassword(pair.first);
-            string message = "3;" + to_string(players[pair.first].hangman) + ";";
+            string message = "3;" + to_string(players[pair.first].hangman) + "&";
             send(pair.first, message.c_str(), message.size(), 0);
         }
     }
@@ -164,7 +163,6 @@ void deletePlayer(int epollFd, int clientFd) {
         return;
     }
     createScoreBoard();
-
 }
 // gracz wrocil do menu
 void playerLeft(int clientFd) {
@@ -192,13 +190,13 @@ void timeEnded() {
         //jezeli gracz nie zdazyl odgadnac hasla przed uplynieciem czasu oznaczamy go jako przegranego
         if (!(pair.second.password == pass)) {
             int clinetFd = pair.first;
-            message = "0; Koniec czasu! Zostałeś powieszony x.x\n;";
+            message = "0; Koniec czasu! Zostałeś powieszony x.x\n&";
             send(clinetFd, message.c_str(), message.size(), 0);
             players[clinetFd].hangman = 7;
-            message = "3;" + to_string(players[clinetFd].hangman) + ";";
+            message = "3;" + to_string(players[clinetFd].hangman) + "&";
             send(clinetFd, message.c_str(), message.size(), 0);
             //wyslanie do klienta poprawnego hasla
-            message = "2;"+topic+"\n" + pass + "\n;";
+            message = "2;"+topic+"\n" + pass + "\n&";
             send(clinetFd, message.c_str(), message.size(), 0);
 
         }
@@ -249,7 +247,7 @@ void updatePassword(char ans, int fd) {
     ans=toupper(ans);
     //sprawdzamy czy gracz zgadywal juz dana litere
     if (players[fd].usedChars[ans-'A']) {
-        string message = "0; sprawdzałeś/aś już tę literę!\n;";
+        string message = "0; sprawdzałeś/aś już tę literę!\n&";
         send(fd, message.c_str(), message.size(), 0);
         return;
     }
@@ -260,21 +258,21 @@ void updatePassword(char ans, int fd) {
             players[fd].password[i] = ans;
             players[fd].score++;
             guessedCorrectly = true;
-            createScoreBoard();
         }
     }
+	createScoreBoard();
     //jezeli gracz nie zgadl dodajemy pietro wisielca
     if (!guessedCorrectly) {
         players[fd].hangman++;
-        string message = "3;" + to_string(players[fd].hangman) + ";";
+        string message = "3;" + to_string(players[fd].hangman) + "&";
         int n = send(fd, message.c_str(), message.size(), 0);
         if (n==-1) {
             perror("send updatePassword:");
         }
         createScoreBoard();
         if (players[fd].hangman == 7) {
-            message = "0; Zostałeś powieszony x.x\n;";
-            send(fd, message.c_str(), message.size(), 0);
+            message = "0; Zostałeś powieszony x.x\n&";
+            n = send(fd, message.c_str(), message.size(), 0);
             if (n==-1) {
                 perror("send updatePassword:");
             }
@@ -287,7 +285,7 @@ void updatePassword(char ans, int fd) {
     }
     //sprawdzamy czy gracz odgadl cale haslo
     if (players[fd].password == pass) {
-        string message = "0;Odgadłeś hasło, gratulacje :D\n;";
+        string message = "0;Odgadłeś hasło, gratulacje :D\n&";
         int n = send(fd, message.c_str(), message.size(), 0);
         if (n==-1) {
             perror("send updatePassword:");
@@ -307,7 +305,7 @@ void updatePassword(char ans, int fd) {
         bonus = bonus/2;
     }
     //rozeslanie statusu hasla do gracza
-    string message = "2;"+topic+"\n" + players[fd].password + "\n;";
+    string message = "2;"+topic+"\n" + players[fd].password + "\n&";
     send(fd, message.c_str(), message.size(), 0);
 }
 
@@ -316,7 +314,7 @@ void handleClientInput(int clientFd, const string &input) {
     //obsluga wpisania nicku przez klienta
     if (players[clientFd].nickname.empty()) {
         if (nicknames.find(input) != nicknames.end()) {
-            const char *notAvailable = "01;Nick zajęty. Wybierz inny: \n;";
+            const char *notAvailable = "01;Nick zajęty. Wybierz inny: \n&";
             int n = send(clientFd, notAvailable, strlen(notAvailable), 0);
             if (n== -1) {
                 perror("send handleClientInput: ");
@@ -325,7 +323,7 @@ void handleClientInput(int clientFd, const string &input) {
             players[clientFd].nickname = input;
             nicknames.insert(input);
 
-            const char *acceptedNick = "01;Nick zaakceptowany! Miłej gry.\n;";
+            const char *acceptedNick = "01;Nick zaakceptowany! Miłej gry.\n&";
             int n = send(clientFd, acceptedNick, strlen(acceptedNick), 0);
             if (n== -1) {
                 perror("send handleClientInput: ");
@@ -333,7 +331,7 @@ void handleClientInput(int clientFd, const string &input) {
             //przeniesienie gracza do menu
             players[clientFd].playerStatus = 2;
             //odsylam do klienta jego wasny nick zatwierdzony przez serwer
-            string message = "02;"+input+";";
+            string message = "02;"+input+"&";
             n = send(clientFd, message.c_str(), message.size(), 0);
             if (n== -1) {
                 perror("send handleClientInput: ");
@@ -341,7 +339,7 @@ void handleClientInput(int clientFd, const string &input) {
         }
     } else {
         //klient dolaczyl do pokoju
-        if (input == "USER JOIN;") {
+        if (input == "USER JOIN") {
             players[clientFd].time =  time(nullptr);
             string message;
             //zmieniam status gracza na obecny w pokoju
@@ -354,16 +352,16 @@ void handleClientInput(int clientFd, const string &input) {
                 lastTime = chrono::steady_clock::now();
                 startGame = true;
             }else if (startGame) {
-                message = "6;Witaj aktualnie trwa gra, poczekaj aż się zakończy.\n;";
+                message = "6;Witaj aktualnie trwa gra, poczekaj aż się zakończy.\n&";
             }else {
-                message = "6;Witaj w poczekalni, oczekujemy na rozpoczęcie gry.\n;";
+                message = "6;Witaj w poczekalni, oczekujemy na rozpoczęcie gry.\n&";
             }
             int n = send(clientFd, message.c_str(), message.size(), 0);
             if (n==-1) {
                 perror("send handleClientInput: ");
             }
             createScoreBoard();
-        }else if (input == "USER LEFT;") {
+        }else if (input == "USER LEFT") {
             playerLeft(clientFd);
         }else {
             //oblsuzenie wyslanego przez gracza znaku
@@ -371,13 +369,13 @@ void handleClientInput(int clientFd, const string &input) {
                 updatePassword(input[0], clientFd);
             }else {
                 if (!startGame) {
-                    string message = "0;Gra nierozpoczęta.\n;";
+                    string message = "0;Gra nierozpoczęta.\n&";
                     int n = send(clientFd, message.c_str(), message.size(), 0);
                     if (n==-1) {
                         perror("send handleClientInput: ");
                     }
                 }else if (!players[clientFd].playerStatus){
-                    string message = "0;Poczekaj na zakończenie aktualnej rozgrywki.\n;";
+                    string message = "0;Poczekaj na zakończenie aktualnej rozgrywki.\n&";
                     int n = send(clientFd, message.c_str(), message.size(), 0);
                     if (n==-1) {
                         perror("send handleClientInput: ");
@@ -437,7 +435,7 @@ int runMainLoop() {
         return 1;
     }
 
-    cout << "Serwer działa na porcie " << PORT << endl;
+    cout << ":) Serwer działa na porcie " << PORT << endl;
 
 
     while (true) {
@@ -472,7 +470,7 @@ int runMainLoop() {
                 }
 
                 setNonBlocking(clientFd);
-                event.events = EPOLLIN | EPOLLET;
+                event.events = EPOLLIN;
                 event.data.fd = clientFd;
 
                 if (epoll_ctl(epollFd, EPOLL_CTL_ADD, clientFd, &event) == -1) {
@@ -482,7 +480,7 @@ int runMainLoop() {
                 }
 
                 players[clientFd] = Player{};
-                const char *welcome = "01;Witaj! Wprowadź swój nick!: ;";
+                const char *welcome = "01;Witaj! Wprowadź swój nick!: &";
                 send(clientFd, welcome, strlen(welcome), 0);
                 createScoreBoard();
             } else {
@@ -501,8 +499,20 @@ int runMainLoop() {
                     deletePlayer(epollFd, clientFd);
                     createScoreBoard();
                 } else {
-                    string input(buffer, bytesRead - 1);
-                    handleClientInput(clientFd, input);
+                   	//string input(buffer, bytesRead);
+                    //handleClientInput(clientFd, input);
+                    static std::unordered_map<int, std::string> messageBuffers;
+
+    				messageBuffers[clientFd] += std::string(buffer, bytesRead);
+
+    				size_t semicolonPos;
+    				while ((semicolonPos = messageBuffers[clientFd].find(';')) != std::string::npos) {
+				        string message = messageBuffers[clientFd].substr(0, semicolonPos);
+						cout<<message<<endl;
+        				messageBuffers[clientFd].erase(0, semicolonPos + 1);
+
+        				handleClientInput(clientFd, message);
+    				}
                 }
             }
         }

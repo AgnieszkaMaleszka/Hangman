@@ -236,46 +236,57 @@ void MyWidget::setNickname(QString currentText){
     ui->Menu->setEnabled(true);
 }
 void MyWidget::socketReadable() {
-    QByteArray ba = sock->readAll();
-    QString message = QString::fromUtf8(ba).trimmed();
-    QStringList messages = message.split(';', Qt::SkipEmptyParts); // Podział na segmenty na podstawie ';'
+    static QByteArray buffer; // Bufor do przechowywania nieprzetworzonych danych
+    buffer.append(sock->readAll()); // Dodanie nowych danych do bufora
 
-    QString currentType;
-    QString currentText;
-    for (const QString& segment : messages) {
-        if (currentType.isEmpty()) {
-            // Ustawienie typu wiadomości
-            currentType = segment;
-        } else {
-            // Ustawienie tekstu wiadomości
-            currentText = segment;
+    while (true) {
+        int delimiterIndex = buffer.indexOf('&'); // Znalezienie pierwszego separatora
+        if (delimiterIndex == -1) {
+            // Jeśli brak pełnego komunikatu, przerwij pętlę
+            break;
+        }
 
-           // std::cout << "Type: " << currentType.toStdString() << " Text: " << currentText.toStdString() << std::endl;
-            if(ui->talkGroup->isEnabled()){
+        // Wyodrębnienie pełnego komunikatu
+        QByteArray singleMessage = buffer.left(delimiterIndex);
+        buffer.remove(0, delimiterIndex + 1); // Usuń przetworzony komunikat z bufora
+
+        QString message = QString::fromUtf8(singleMessage).trimmed();
+
+        // Podział na typ i treść komunikatu
+        int colonIndex = message.indexOf(';');
+        if (colonIndex == -1) {
+            qWarning() << "Niepoprawny format komunikatu: " << message;
+            continue; // Pomijamy niepoprawne komunikaty
+        }
+
+        QString currentType = message.left(colonIndex).trimmed(); // Typ komunikatu
+        QString currentText = message.mid(colonIndex + 1).trimmed(); // Treść komunikatu
+
+        // Obsługa komunikatu na podstawie jego typu
+        if (ui->talkGroup->isEnabled()) {
             if (currentType == "0") {
-               setCommunicate(currentText);
+                setCommunicate(currentText);
             } else if (currentType == "1") {
                 setRanking(currentText);
             } else if (currentType == "2") {
                 setHaslo(currentText);
             } else if (currentType == "3") {
                 setImage(currentText);
-            } else if(currentType == "4"){
+            } else if (currentType == "4") {
                 setTime(currentText);
-            }else if(currentType == "6"){
+            } else if (currentType == "6") {
                 setWaitingRoom(currentText);
             }
-            }else if(currentType == "01"){
-                ui->KomunikatyGeneral->append(currentText);
-            }else if (currentType == "02"){
-                setNickname(currentText);
-            }
-            // Wyczyszczenie dla następnej wiadomości
-            currentType.clear();
-            currentText.clear();
+        } else if (currentType == "01") {
+            ui->KomunikatyGeneral->append(currentText);
+        } else if (currentType == "02") {
+            setNickname(currentText);
+        } else {
+            qWarning() << "Nieobsługiwany typ komunikatu: " << currentType;
         }
     }
 }
+
 
 
 void MyWidget::sendBtnHit() {
@@ -284,7 +295,7 @@ void MyWidget::sendBtnHit() {
         return;
 
     // Wysyłanie wiadomości przez socket
-    sock->write((txt + '\n').toUtf8());
+    sock->write((txt + ";").toUtf8());
 
     // Czyszczenie pola tekstowego i ustawienie focusa
     ui->Wiadomosc->clear();
@@ -296,20 +307,20 @@ void MyWidget::nickBtnHit() {
         return;
 
     // Wysyłanie wiadomości przez socket
-    sock->write((txt + '\n').toUtf8());
+    sock->write((txt + ";").toUtf8());
     ui->Nick->clear();
     ui->Nick->setFocus();
 }
 void MyWidget::joinBtnHit() {
     ui->Menu->setEnabled(false);
     // Wyślij do serwera, aby dołączył użytkownika
-    sock->write("USER JOIN;\n");
+    sock->write("USER JOIN;");
     ui->talkGroup->setEnabled(true);
 }
 
 void MyWidget::exitBtnHit() {
     ui->Menu->setEnabled(true);
-    sock->write("USER LEFT;\n");
+    sock->write("USER LEFT;");
     ui->talkGroup->setEnabled(false);
     ui->Wiadomosc->clear();
     ui->Ranking->clear();
