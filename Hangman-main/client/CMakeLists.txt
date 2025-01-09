@@ -32,7 +32,7 @@ target_link_libraries(client PRIVATE
 
 target_compile_options(client PRIVATE -Wall -Wextra)
 
-file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/client/images)
+#file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/client/images)
 
-file(COPY ${CMAKE_SOURCE_DIR}/client/images/
-     DESTINATION ${CMAKE_BINARY_DIR}/client/images)
+#file(COPY ${CMAKE_SOURCE_DIR}/client/images/
+#     DESTINATION ${CMAKE_BINARY_DIR}/client/images)
