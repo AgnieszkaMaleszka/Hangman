@@ -13,10 +13,10 @@
 #include <errno.h>
 #include <fstream>
 #include <math.h>
+#include <random>
 #define MAX_EVENTS 10
 #define BUFFER_SIZE 1024
 #define PORT 1234
-
 using namespace std;
 const int topicsNumber=3; //liczba tematow do wyboru
 string topics[topicsNumber] = {"PKP", "CELEBRYCI", "SWIETA"}; //tematy
@@ -27,7 +27,12 @@ int countdown = 90 * 1000; //czas ktory pozostal do konca rundy - w milisekundac
 bool startGame = false; //czy trwa aktualnie jakas gra
 auto lastTime = chrono::steady_clock::now(); //ustawienie pomiaru czasu
 int activePlayers = 0; //liczba aktywnych graczy - w pokoju
+int playersInGame = 0; //liczba graczy w rozgrywce
 int efd; //epoll descriptor
+chrono::steady_clock::time_point firstCorrectGuessTime;
+bool firstGuessMade = false;
+int answerDelay = 500; //po jakim czasie moze przyjsc kolejna odpowiedz zeby uznac ze gracze odpowiedzieli w tym samymm czasie
+mt19937 rng(random_device{}());
 // Struktura gracza
 struct Player {
     string nickname;
@@ -60,31 +65,34 @@ void broadcast(const string &message, int excludeFd, int flag) {
     string formattedMessage = to_string(flag) + ";" + message + "&";
     for (const auto &pair : players) {
         if (pair.first != excludeFd) {
-            int n = send(pair.first, formattedMessage.c_str(), formattedMessage.size(), 0);
-            if (n==-1 or n < formattedMessage.size()) {
-                perror("send");
-                close(pair.first);
-                epoll_ctl(efd, EPOLL_CTL_DEL, pair.first, nullptr);
-                nicknames.erase(players[pair.first].nickname);
-                if (players[pair.first].playerStatus != 2) {
-                    activePlayers--;
-                }
-                players.erase(pair.first);
-                //jezeli nie ma juz graczy aktywnych zresetuj ustawienia gry
-                if (activePlayers == 0 or players.size() == 0) {
-                    countdown = 90*1000;
-                    startGame = false;
-                }
-                string scoreBoard;
-                for (const auto &pair : players) {
-                    if (!pair.second.nickname.empty() and pair.second.playerStatus != 2) {
-                        scoreBoard += pair.second.nickname + ":" + to_string(pair.second.score) + ":" +
-                        to_string(pair.second.hangman) + ":"+
-                            to_string(pair.second.playerStatus)+"\n";
+            if(players[pair.first].playerStatus != 2  and (flag == 0 or flag == 1 or flag == 2 or flag == 3  or flag == 4)){
+                int n = send(pair.first, formattedMessage.c_str(), formattedMessage.size(), 0);
+                if (n == -1 || n < static_cast<int>(formattedMessage.size())) {
+                    perror("send");
+                    close(pair.first);
+                    epoll_ctl(efd, EPOLL_CTL_DEL, pair.first, nullptr);
+                    nicknames.erase(players[pair.first].nickname);
+                    if (players[pair.first].playerStatus != 2) {
+                        activePlayers--;
                     }
-                }
-                if (!scoreBoard.empty()) {
-                    broadcast(scoreBoard, -1, 1);
+                    players.erase(pair.first);
+                    //jezeli nie ma juz graczy aktywnych zresetuj ustawienia gry
+                    if (activePlayers == 0 or players.size() == 0 or playersInGame == 0) {
+                        firstGuessMade = false;
+                        countdown = 90*1000;
+                        startGame = false;
+                    }
+                    string scoreBoard;
+                    for (const auto &pair : players) {
+                        if (!pair.second.nickname.empty() and pair.second.playerStatus != 2) {
+                            scoreBoard += pair.second.nickname + ":" + to_string(pair.second.score) + ":" +
+                            to_string(pair.second.hangman) + ":"+
+                                to_string(pair.second.playerStatus)+"\n";
+                        }
+                    }
+                    if (!scoreBoard.empty()) {
+                        broadcast(scoreBoard, -1, 1);
+                    }
                 }
             }
         }
@@ -110,6 +118,7 @@ void createScoreBoard() {
 }
 // usuwanie gracza - na skutek rozlaczenia sie
 void deletePlayer(int clientFd) {
+    shutdown(clientFd, SHUT_RDWR);
     close(clientFd);
     epoll_ctl(efd, EPOLL_CTL_DEL, clientFd, nullptr);
     nicknames.erase(players[clientFd].nickname);
@@ -118,11 +127,15 @@ void deletePlayer(int clientFd) {
     if (players[clientFd].playerStatus != 2) {
         activePlayers--;
     }
+    if(players[clientFd].playerStatus == 1) {
+      playersInGame--;
+    }
     players.erase(clientFd);
     //jezeli nie ma juz graczy aktywnych zresetuj ustawienia gry
-    if (activePlayers == 0 or players.size() == 0) {
+    if (activePlayers == 0 or players.size() == 0 or playersInGame == 0) {
         countdown = 90*1000;
         startGame = false;
+        firstGuessMade = false;
         return;
     }
     createScoreBoard();
@@ -134,16 +147,15 @@ void resetPassword(int fd) {
     players[fd].hangman = 0;
     string message = "2;" +topic +"\n"+ players[fd].password + "\n&";
     int n = send(fd, message.c_str(), message.size(), 0);
-    if (n == -1 or n < message.size()) {
+    if (n == -1 || n < static_cast<int>(message.size())) {
       perror("send");
       deletePlayer(fd);
     }
 }
+
 // Funkcja losujaca haslo dla pokoju, ustawia rowniez kategorie dla hasla
 void setNewPassword() {
-    srand(time(nullptr));
-
-    int num = rand() % topicsNumber;
+    int num = uniform_int_distribution<>(0, topicsNumber - 1)(rng);
     topic = topics[num];
 
     ifstream file("topics/" + topic + ".txt");
@@ -160,7 +172,8 @@ void setNewPassword() {
     file.close();
 
     if (!passwords.empty()) {
-        int passwordIndex = rand() % passwords.size();
+        uniform_int_distribution<> dist(0, passwords.size() - 1);
+        int passwordIndex = dist(rng);
         pass = passwords[passwordIndex];
         // bonus za odgadniecie hasla na poczatku jest rowne dlugosci hasla
         // wraz z odgadywaniem hasla bonus zmniejsza sie o polowe
@@ -177,7 +190,9 @@ void setNewPassword() {
 void resetGame() {
     //wybieranie nowego hasla i kategorii
     setNewPassword();
+    lastTime = chrono::steady_clock::now();
     countdown = 90 * 1000;
+    firstGuessMade = false;
     for (auto &pair : players) {
         if (!pair.second.nickname.empty() and pair.second.playerStatus != 2) {
             pair.second.hangman = 0;
@@ -188,12 +203,14 @@ void resetGame() {
             resetPassword(pair.first);
             string message = "3;" + to_string(players[pair.first].hangman) + "&";
             int n = send(pair.first, message.c_str(), message.size(), 0);
-            if(n == -1 or n < message.size()) {
+            if (n == -1 || n < static_cast<int>(message.size())) {
               perror("send");
               deletePlayer(pair.first);
             }
+            playersInGame++;
         }
     }
+    broadcast(to_string(countdown / 1000), -1, 4);
     createScoreBoard();
 }
 // gracz wrocil do menu
@@ -202,8 +219,13 @@ void playerLeft(int clientFd) {
     if (players[clientFd].playerStatus != 2) {
         activePlayers--;
     }
+    //cout<<"playerStatus "<<players[clientFd].playerStatus<<" "<<playersInGame<<"\n";
+    if (players[clientFd].playerStatus == 1) {
+        playersInGame--;
+    }
     //jezeli w pokoju nie ma aktywnych graczy to przywroc ustawienia poczatkowe
-    if (activePlayers == 0) {
+    if (activePlayers == 0 or playersInGame == 0) {
+        firstGuessMade = false;
         countdown = 90*1000;
         startGame = false;
     }
@@ -220,34 +242,19 @@ void timeEnded() {
     for (const auto &pair : players) {
         //sprawdzamy czy dany gracz odgadnal haslo
         //jezeli gracz nie zdazyl odgadnac hasla przed uplynieciem czasu oznaczamy go jako przegranego
-        if (!(pair.second.password == pass)) {
+        if (!(pair.second.password == pass) and players[pair.first].playerStatus == 1) {
             int clinetFd = pair.first;
             message = "0; Koniec czasu! Zostałeś powieszony x.x\n&";
             int n = send(clinetFd, message.c_str(), message.size(), 0);
-            if(n == -1 or n < message.size()) {
+            if (n == -1 || n < static_cast<int>(message.size())) {
               perror("send");
               deletePlayer(clinetFd);
             }
-            players[clinetFd].hangman = 7;
-            message = "3;" + to_string(players[clinetFd].hangman) + "&";
-            n = send(clinetFd, message.c_str(), message.size(), 0);
-            if(n == -1 or n < message.size()) {
-                perror("send");
-                deletePlayer(clinetFd);
-            }
-            //wyslanie do klienta poprawnego hasla
-            message = "2;"+topic+"\n" + pass + "\n&";
-            n = send(clinetFd, message.c_str(), message.size(), 0);
-            if(n == -1 or n < message.size()) {
-                perror("send");
-                deletePlayer(clinetFd);
-            }
-
         }
     }
     createScoreBoard();
     //zatrzymanie gry
-    cout << activePlayers << endl;
+    //cout << activePlayers << endl;
     if (activePlayers >= 2){
         resetGame();
         lastTime = chrono::steady_clock::now();
@@ -261,14 +268,8 @@ void timeEnded() {
 }
 //Funkcja sprawdzajaca czy wszyscy gracze przegrali/wygrali
 void checkLosers() {
-    cout << "CZY WSZYSCY PRZEGRALI?" << endl;
+    //cout << "CZY WSZYSCY PRZEGRALI?" << endl;
     for (const auto &pair : players) {
-        /*cout << "GRACZ: " << pair.second.playerStatus << " " << pair.second.nickname
-             << ", Wisielec: " << pair.second.hangman
-             << ", Hasło zgadnięte: "<<" "<<pair.second.password<<" "
-             << (pair.second.password == pass)<<" "<<pair.second.password.size()
-        <<" "<<pass.size() << endl;
-        */
         //sprawdzenie czy dany gracz bierze udzial w rundzie
         if (pair.second.playerStatus == 1) {
             bool check = (pair.second.password == pass); //zmienna inforomujaca ze gracz odgadl haslo
@@ -279,29 +280,30 @@ void checkLosers() {
             }
         }
     }
-   // cout << "Wszyscy gracze przegrali. Resetowanie gry." << endl;
     timeEnded();
-   // startGame = false;
 }
 
 
-// Funkcja aktualizująca hasło na podstawie zgadniętej litery
 void updatePassword(char ans, int fd) {
     bool guessedCorrectly = false;
-    ans=toupper(ans);
+    ans = toupper(ans);
     int n = 0;
-    //sprawdzamy czy gracz zgadywal juz dana litere
-    if (players[fd].usedChars[ans-'A']) {
+
+    // Sprawdzenie, czy litera była już użyta
+    if (players[fd].usedChars[ans - 'A']) {
         string message = "0; sprawdzałeś/aś już tę literę!\n&";
         n = send(fd, message.c_str(), message.size(), 0);
-        if(n == -1 or n < message.size()) {
+        if (n == -1 || n < static_cast<int>(message.size())) {
             perror("send");
             deletePlayer(fd);
         }
         return;
     }
-    //oznaczamy litere jako uzyta
-    players[fd].usedChars[ans-'A'] = 1;
+
+    // Oznaczenie litery jako użytej
+    players[fd].usedChars[ans - 'A'] = true;
+
+    // Sprawdzenie poprawności zgadywanej litery
     for (size_t i = 0; i < pass.size(); i++) {
         if (ans == pass[i]) {
             players[fd].password[i] = ans;
@@ -309,61 +311,81 @@ void updatePassword(char ans, int fd) {
             guessedCorrectly = true;
         }
     }
-	createScoreBoard();
-    //jezeli gracz nie zgadl dodajemy pietro wisielca
+
+    createScoreBoard();
+
+    // Obsługa błędnej litery
     if (!guessedCorrectly) {
         players[fd].hangman++;
         string message = "3;" + to_string(players[fd].hangman) + "&";
         n = send(fd, message.c_str(), message.size(), 0);
-        if (n==-1 or n < message.size()) {
+        if (n == -1 || n < static_cast<int>(message.size())) {
             perror("send updatePassword:");
             deletePlayer(fd);
         }
         createScoreBoard();
+
         if (players[fd].hangman == 7) {
             message = "0; Zostałeś powieszony x.x\n&";
             n = send(fd, message.c_str(), message.size(), 0);
-            if (n==-1) {
+            if (n == -1 || n < static_cast<int>(message.size())) {
                 perror("send updatePassword:");
                 deletePlayer(fd);
             }
             broadcast("Gracz " + players[fd].nickname + " został powieszony!\n", fd, 0);
             createScoreBoard();
-            //sprawdzamy czy sa gracze ktorzy nadal odgaduja haslo
             checkLosers();
             return;
         }
     }
-    //sprawdzamy czy gracz odgadl cale haslo
+
+    // Sprawdzenie, czy gracz odgadł całe hasło
     if (players[fd].password == pass) {
+        auto currentTime = chrono::steady_clock::now();
         string message = "0;Odgadłeś hasło, gratulacje :D\n&";
         int n = send(fd, message.c_str(), message.size(), 0);
-        if (n==-1 or n < message.size()) {
+        if (n == -1 || n < static_cast<int>(message.size())) {
             perror("send updatePassword:");
             deletePlayer(fd);
         }
-        //za odgadniecie hasla gracz dostaje bonusowe punkty
-        players[fd].score += bonus;
-        //aktualziacja rankingu
+        if (!firstGuessMade) {
+            firstCorrectGuessTime = currentTime;
+            firstGuessMade = true;
+            players[fd].score += bonus;
+        } else {
+            auto elapsed = chrono::duration_cast<chrono::milliseconds>(currentTime - firstCorrectGuessTime).count();
+            //cout<<"elapsed "<<elapsed<<" ms "<<answerDelay<<"ms \n";
+            if (elapsed <= answerDelay) {
+                players[fd].score += bonus;
+            } else {
+                // Zmniejszenie bonusu dla kolejnych graczy
+                bonus = bonus / 2;
+                players[fd].score += bonus;
+                firstCorrectGuessTime = currentTime;
+            }
+        }
+
+        // Aktualizacja rankingu
         createScoreBoard();
         broadcast("Gracz " + players[fd].nickname + " odgadł hasło, gratulacje!\n", fd, 0);
-        //jezeli czas pozostaly jest wiekszy niz 20 sekund to go zmniejszamy
+
+        // Skrócenie czasu rundy, jeśli hasło zostało odgadnięte
         if (countdown > 20 * 1000) {
             countdown = 20 * 1000;
         }
-        //sprawdzamy czy sa jeszcze gracze ktorzy odgaduja haslo
+
         checkLosers();
-        //po odgadnieciu hasla przez gracza bonus zostaje zmniejszony
-        bonus = bonus/2;
     }
-    //rozeslanie statusu hasla do gracza
-    string message = "2;"+topic+"\n" + players[fd].password + "\n&";
+
+    // Rozesłanie statusu hasła do gracza
+    string message = "2;" + topic + "\n" + players[fd].password + "\n&";
     n = send(fd, message.c_str(), message.size(), 0);
-    if(n==-1 or n < message.size()) {
-      perror("send");
-      deletePlayer(fd);
+    if (n == -1 || n < static_cast<int>(message.size())) {
+        perror("send updatePassword:");
+        deletePlayer(fd);
     }
 }
+
 
 // Obsługa wejścia klienta
 void handleClientInput(int clientFd, const string &input) {
@@ -372,7 +394,7 @@ void handleClientInput(int clientFd, const string &input) {
         if (nicknames.find(input) != nicknames.end()) {
             const char *notAvailable = "01;Nick zajęty. Wybierz inny: \n&";
             int n = send(clientFd, notAvailable, strlen(notAvailable), 0);
-            if (n== -1 or n < strlen(notAvailable)) {
+            if (n == -1 || n < static_cast<int>(strlen(notAvailable))) {
                 perror("send handleClientInput: ");
                 deletePlayer(clientFd);
             }
@@ -382,7 +404,7 @@ void handleClientInput(int clientFd, const string &input) {
 
             const char *acceptedNick = "01;Nick zaakceptowany! Miłej gry.\n&";
             int n = send(clientFd, acceptedNick, strlen(acceptedNick), 0);
-            if (n== -1 or n < strlen(acceptedNick)) {
+            if (n == -1 || n < static_cast<int>(strlen(acceptedNick))) {
                 perror("send handleClientInput: ");
                 deletePlayer(clientFd);
             }
@@ -391,7 +413,7 @@ void handleClientInput(int clientFd, const string &input) {
             //odsylam do klienta jego wasny nick zatwierdzony przez serwer
             string message = "02;"+input+"&";
             n = send(clientFd, message.c_str(), message.size(), 0);
-            if (n== -1 or n < message.size()) {
+            if (n == -1 || n < static_cast<int>(message.size())) {
                 perror("send handleClientInput: ");
                 deletePlayer(clientFd);
             }
@@ -404,8 +426,8 @@ void handleClientInput(int clientFd, const string &input) {
             //zmieniam status gracza na obecny w pokoju
             players[clientFd].playerStatus = 0;
             //zwiekszam liczbe graczy gotowych do rozpoczecia
-            activePlayers ++;
             broadcast("Gracz " + players[clientFd].nickname + " dołączył do gry.\n", clientFd, 0);
+            activePlayers ++;
             if (!startGame and activePlayers >=2) {
                 resetGame();
                 lastTime = chrono::steady_clock::now();
@@ -416,7 +438,7 @@ void handleClientInput(int clientFd, const string &input) {
                 message = "6;Witaj w poczekalni, oczekujemy na rozpoczęcie gry.\n&";
             }
             int n = send(clientFd, message.c_str(), message.size(), 0);
-            if (n==-1 or n < message.size()) {
+            if (n == -1 || n < static_cast<int>(message.size())) {
                 perror("send handleClientInput: ");
                 deletePlayer(clientFd);
             }
@@ -431,14 +453,14 @@ void handleClientInput(int clientFd, const string &input) {
                 if (!startGame) {
                     string message = "0;Gra nierozpoczęta.\n&";
                     int n = send(clientFd, message.c_str(), message.size(), 0);
-                    if (n==-1 or n< message.size()) {
+                    if (n == -1 || n < static_cast<int>(message.size())) {
                         perror("send handleClientInput: ");
                         deletePlayer(clientFd);
                     }
                 }else if (!players[clientFd].playerStatus){
                     string message = "0;Poczekaj na zakończenie aktualnej rozgrywki.\n&";
                     int n = send(clientFd, message.c_str(), message.size(), 0);
-                    if (n==-1 or n < message.size()) {
+                    if (n == -1 || n < static_cast<int>(message.size())) {
                         perror("send handleClientInput: ");
                         deletePlayer(clientFd);
                     }
@@ -469,12 +491,14 @@ int runMainLoop() {
 
     if (bind(serverFd, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) == -1) {
         perror("bind");
+        shutdown(serverFd, SHUT_RDWR);
         close(serverFd);
         return 1;
     }
 
     if (listen(serverFd, SOMAXCONN) == -1) {
         perror("listen");
+        shutdown(serverFd, SHUT_RDWR);
         close(serverFd);
         return 1;
     }
@@ -482,6 +506,7 @@ int runMainLoop() {
     int efd = epoll_create1(0);
     if (efd == -1) {
         perror("epoll_create1");
+        shutdown(serverFd, SHUT_RDWR);
         close(serverFd);
         return 1;
     }
@@ -492,6 +517,7 @@ int runMainLoop() {
 
     if (epoll_ctl(efd, EPOLL_CTL_ADD, serverFd, &event) == -1) {
         perror("epoll_ctl");
+        shutdown(serverFd, SHUT_RDWR);
         close(serverFd);
         close(efd);
         return 1;
@@ -505,18 +531,18 @@ int runMainLoop() {
             auto currentTime = chrono::steady_clock::now();
             auto elapsed = chrono::duration_cast<chrono::milliseconds>(currentTime - lastTime).count();
             if (elapsed >= 1000) { // Aktualizacja co sekundę
-                countdown -= elapsed;
-                lastTime = currentTime;
+                int secondsToSubtract = elapsed / 1000;
+                countdown = max(0, countdown - secondsToSubtract * 1000);
+                lastTime += chrono::milliseconds(secondsToSubtract * 1000);
                 if (countdown <= 0) {
                     timeEnded();
                 } else {
-                    int conv = round(countdown / 1000);
-                    broadcast(to_string(conv), -1, 4);
+                    broadcast(to_string(countdown / 1000), -1, 4);
                 }
             }
         }
 
-        int numEvents = epoll_wait(efd, events, MAX_EVENTS, 1000); // Wait 1 mili second
+        int numEvents = epoll_wait(efd, events, MAX_EVENTS, 1000);
         if (numEvents == -1) {
             perror("epoll_wait");
             break;
@@ -537,6 +563,7 @@ int runMainLoop() {
 
                 if (epoll_ctl(efd, EPOLL_CTL_ADD, clientFd, &event) == -1) {
                     perror("epoll_ctl: client");
+                    shutdown(clientFd, SHUT_RDWR);
                     close(clientFd);
                     continue;
                 }
@@ -544,7 +571,7 @@ int runMainLoop() {
                 players[clientFd] = Player{};
                 const char *welcome = "01;Witaj! Wprowadź swój nick!: &";
                 int n = send(clientFd, welcome, strlen(welcome), 0);
-                if ( n == -1 or n< strlen(welcome) ) {
+                if (n == -1 || n < static_cast<int>(strlen(welcome))) {
                   perror("send handleClientInput: ");
                   deletePlayer(clientFd);
                 }
@@ -565,16 +592,14 @@ int runMainLoop() {
                     deletePlayer(clientFd);
                     createScoreBoard();
                 } else {
-                   	//string input(buffer, bytesRead);
-                    //handleClientInput(clientFd, input);
-                    static std::unordered_map<int, std::string> messageBuffers;
+                    static unordered_map<int, string> messageBuffers;
 
-    				messageBuffers[clientFd] += std::string(buffer, bytesRead);
+                    messageBuffers[clientFd] += string(buffer, bytesRead);
 
     				size_t semicolonPos;
-    				while ((semicolonPos = messageBuffers[clientFd].find(';')) != std::string::npos) {
+                    while ((semicolonPos = messageBuffers[clientFd].find(';')) != string::npos) {
 				        string message = messageBuffers[clientFd].substr(0, semicolonPos);
-						cout<<message<<endl;
+						//cout<<message<<endl;
         				messageBuffers[clientFd].erase(0, semicolonPos + 1);
 
         				handleClientInput(clientFd, message);
@@ -584,6 +609,7 @@ int runMainLoop() {
         }
     }
 
+    shutdown(serverFd, SHUT_RDWR);
     close(serverFd);
     close(efd);
     return 1;

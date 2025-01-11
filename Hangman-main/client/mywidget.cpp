@@ -15,6 +15,26 @@ MyWidget::MyWidget(QWidget *parent) : QWidget(parent), ui(new Ui::MyWidget), sce
     ui->Komunikaty->setReadOnly(true);
     ui->KomunikatyGeneral->setReadOnly(true);
     ui->Haslo->setReadOnly(true);
+    ui->Time->setReadOnly(true);
+
+    this->setStyleSheet(
+        "QPushButton {"
+        "   background-color: #f39c12;"
+        "   color: white;"
+        "   font-weight: bold;"
+        "   border: 2px solid #d35400;"
+        "   border-radius: 8px;"
+        "   padding: 2px;"
+        "}"
+        "QPushButton:hover {"
+        "   background-color: #f1c40f;"
+        "   border-color: #e67e22;"
+        "}"
+        "QPushButton:pressed {"
+        "   background-color: #e67e22;"
+        "   border-color: #d35400;"
+        "}"
+        );
 
     // Ustawienie sceny dla QGraphicsView
     ui->Image->setScene(scene);
@@ -56,7 +76,7 @@ MyWidget::~MyWidget() {
 
 void MyWidget::connectBtnHit() {
     ui->connectGroup->setEnabled(false);
-    ui->KomunikatyGeneral->append("<b>Connecting to local host:1234 </b>");
+    ui->KomunikatyGeneral->append("<b>Łączenie się z wybranym adresem</b>");
  //   ui->talkGroup->setEnabled(false);
     ui->NickGroup->setEnabled(true);
 //    ui->Menu->setEnabled(false);
@@ -75,8 +95,8 @@ void MyWidget::connectBtnHit() {
         connTimeoutTimer = nullptr;
         ui->connectGroup->setEnabled(true);
         ui->NickGroup->setEnabled(false);
-        ui->KomunikatyGeneral->append("<b>Connect timed out</b>");
-        QMessageBox::critical(this, "Error", "Connect timed out");
+        ui->KomunikatyGeneral->append("<b>Nie udało się połączyć z serwerem</b>");
+        QMessageBox::critical(this, "Błąd", "Przekroczono czas oczekiwania na połączenie");
     });
     //set size unlimitted
     ui->Wiadomosc->setMaxLength(1);
@@ -114,8 +134,10 @@ void MyWidget::socketDisconnected() {
 }
 
 void MyWidget::socketError(QTcpSocket::SocketError err) {
-    if (err == QTcpSocket::RemoteHostClosedError)
+    if (err == QTcpSocket::RemoteHostClosedError) {
+        QMessageBox::critical(this, "Błąd", "Połączenie zostało przerwane.");
         return;
+    }
 
     if (connTimeoutTimer) {
         connTimeoutTimer->stop();
@@ -123,8 +145,9 @@ void MyWidget::socketError(QTcpSocket::SocketError err) {
         connTimeoutTimer = nullptr;
     }
 
-    QMessageBox::critical(this, "Error", sock->errorString());
-    ui->KomunikatyGeneral->append("<b>Socket error: " + sock->errorString() + "</b>");
+    QMessageBox::critical(this, "Błąd", sock->errorString());
+    ui->KomunikatyGeneral->append("<b>Wystąpił błąd połączenia: " + sock->errorString() + "</b>");
+    //ui->KomunikatyGeneral->append("<b>Socket error: " + sock->errorString() + "</b>");
     ui->talkGroup->setEnabled(false);
     ui->NickGroup->setEnabled(false);
     ui->Menu->setEnabled(false);
@@ -211,7 +234,7 @@ void MyWidget::setTime(QString currentText){
 }
 void MyWidget::setWaitingRoom(QString currentText){
     //poczekalnia
-    qDebug() << "Katalog roboczy aplikacji:" << QDir::currentPath();
+    //qDebug() << "Katalog roboczy aplikacji:" << QDir::currentPath();
     QString imagePath = "images/waitingCat.jpg";
     QPixmap pixmap(imagePath);
     if (!pixmap.isNull()) {
@@ -229,7 +252,7 @@ void MyWidget::setWaitingRoom(QString currentText){
 }
 void MyWidget::setNickname(QString currentText){
     //ustawienie nicku klienta na taki zakceptowany przez serwer
-    qDebug() << "Ustawiam nick na:" << currentText;
+    //qDebug() << "Ustawiam nick na:" << currentText;
     nickname = currentText;
     ui->Nick->setText(nickname);
     ui->NickGroup->setEnabled(false);
@@ -255,7 +278,7 @@ void MyWidget::socketReadable() {
         // Podział na typ i treść komunikatu
         int colonIndex = message.indexOf(';');
         if (colonIndex == -1) {
-            qWarning() << "Niepoprawny format komunikatu: " << message;
+            //qWarning() << "Niepoprawny format komunikatu: " << message;
             continue; // Pomijamy niepoprawne komunikaty
         }
 
@@ -282,7 +305,7 @@ void MyWidget::socketReadable() {
         } else if (currentType == "02") {
             setNickname(currentText);
         } else {
-            qWarning() << "Nieobsługiwany typ komunikatu: " << currentType;
+            //qWarning() << "Nieobsługiwany typ komunikatu: " << currentType << "  " << currentText;
         }
     }
 }
@@ -324,7 +347,8 @@ void MyWidget::exitBtnHit() {
     ui->talkGroup->setEnabled(false);
     ui->Wiadomosc->clear();
     ui->Ranking->clear();
-    ui->Nick->clear();
+    ui->Time->clear();
+    //ui->Nick->clear();
     ui->Komunikaty->clear();
     ui->Image->scene()->clear();
     ui->KomunikatyGeneral->clear();

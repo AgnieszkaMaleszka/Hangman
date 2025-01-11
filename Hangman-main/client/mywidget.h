@@ -36,7 +36,7 @@ private:
 
     QString nickname;
     bool isLeader=false;
-
+    bool userDisconnected = false;
     void setCommunicate(QString currentText);
     void setRanking(QString currentText);
     void setHaslo(QString currentText);
