@@ -245,6 +245,7 @@ void MyWidget::setWaitingRoom(QString currentText){
     } else {
         ui->Komunikaty->append("<b>Nie udało się załadować obrazu:</b> " + imagePath);
     }
+    ui->Time->clear();
     // Skalowanie obrazu w widoku
     ui->Image->fitInView(scene->sceneRect(), Qt::KeepAspectRatio);
     ui->Komunikaty->append(currentText);
