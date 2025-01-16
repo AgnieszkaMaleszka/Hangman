@@ -65,7 +65,7 @@ void broadcast(const string &message, int excludeFd, int flag) {
     string formattedMessage = to_string(flag) + ";" + message + "&";
     for (const auto &pair : players) {
         if (pair.first != excludeFd) {
-            if(players[pair.first].playerStatus != 2  and (flag == 0 or flag == 1 or flag == 2 or flag == 3  or flag == 4)){
+            if(players[pair.first].playerStatus != 2  and (flag == 0 or flag == 1 or flag == 2 or flag == 3  or flag == 4 or flag == 6)){
                 int n = send(pair.first, formattedMessage.c_str(), formattedMessage.size(), 0);
                 if (n == -1 || n < static_cast<int>(formattedMessage.size())) {
                     perror("send");
@@ -86,8 +86,8 @@ void broadcast(const string &message, int excludeFd, int flag) {
                     for (const auto &pair : players) {
                         if (!pair.second.nickname.empty() and pair.second.playerStatus != 2) {
                             scoreBoard += pair.second.nickname + ":" + to_string(pair.second.score) + ":" +
-                            to_string(pair.second.hangman) + ":"+
-                                to_string(pair.second.playerStatus)+"\n";
+                                          to_string(pair.second.hangman) + ":"+
+                                          to_string(pair.second.playerStatus)+"\n";
                         }
                     }
                     if (!scoreBoard.empty()) {
@@ -108,8 +108,8 @@ void createScoreBoard() {
     for (const auto &pair : players) {
         if (!pair.second.nickname.empty() and pair.second.playerStatus != 2) {
             scoreBoard += pair.second.nickname + ":" + to_string(pair.second.score) + ":" +
-            to_string(pair.second.hangman) + ":"+
-                to_string(pair.second.playerStatus)+"\n";
+                          to_string(pair.second.hangman) + ":"+
+                          to_string(pair.second.playerStatus)+"\n";
         }
     }
     if (!scoreBoard.empty()) {
@@ -128,7 +128,7 @@ void deletePlayer(int clientFd) {
         activePlayers--;
     }
     if(players[clientFd].playerStatus == 1) {
-      playersInGame--;
+        playersInGame--;
     }
     players.erase(clientFd);
     //jezeli nie ma juz graczy aktywnych zresetuj ustawienia gry
@@ -148,8 +148,8 @@ void resetPassword(int fd) {
     string message = "2;" +topic +"\n"+ players[fd].password + "\n&";
     int n = send(fd, message.c_str(), message.size(), 0);
     if (n == -1 || n < static_cast<int>(message.size())) {
-      perror("send");
-      deletePlayer(fd);
+        perror("send");
+        deletePlayer(fd);
     }
 }
 
@@ -204,8 +204,8 @@ void resetGame() {
             string message = "3;" + to_string(players[pair.first].hangman) + "&";
             int n = send(pair.first, message.c_str(), message.size(), 0);
             if (n == -1 || n < static_cast<int>(message.size())) {
-              perror("send");
-              deletePlayer(pair.first);
+                perror("send");
+                deletePlayer(pair.first);
             }
             playersInGame++;
         }
@@ -223,16 +223,17 @@ void playerLeft(int clientFd) {
     if (players[clientFd].playerStatus == 1) {
         playersInGame--;
     }
-    //jezeli w pokoju nie ma aktywnych graczy to przywroc ustawienia poczatkowe
-    if (activePlayers == 0 or playersInGame == 0) {
-        firstGuessMade = false;
-        countdown = 90*1000;
-        startGame = false;
-    }
+
     players[clientFd].playerStatus = 2; //oznaczenie ze dany gracz znajduje sie w menu
     players[clientFd].time = -1;
     players[clientFd].hangman = 0;
     players[clientFd].score = 0;
+
+    if (activePlayers == 0 or playersInGame == 0) {
+        firstGuessMade = false;
+        countdown = 90 * 1000;
+        startGame = false;
+    }
 
     createScoreBoard();
 }
@@ -247,8 +248,8 @@ void timeEnded() {
             message = "0; Koniec czasu! Zostałeś powieszony x.x\n&";
             int n = send(clinetFd, message.c_str(), message.size(), 0);
             if (n == -1 || n < static_cast<int>(message.size())) {
-              perror("send");
-              deletePlayer(clinetFd);
+                perror("send");
+                deletePlayer(clinetFd);
             }
         }
     }
@@ -259,12 +260,12 @@ void timeEnded() {
         resetGame();
         lastTime = chrono::steady_clock::now();
         startGame = true;
-        }else {
-            startGame = false;
-            //przekierowanie graczy do poczekalni
-            message = "Witaj w poczekalni, oczekujemy aż dołączy jeszcze jeden gracz!\n";
-            broadcast(message, -1, 6);
-        }
+    }else {
+        startGame = false;
+        //przekierowanie graczy do poczekalni
+        message = "Witaj w poczekalni, oczekujemy aż dołączy jeszcze jeden gracz!\n";
+        broadcast(message, -1, 6);
+    }
 }
 //Funkcja sprawdzajaca czy wszyscy gracze przegrali/wygrali
 void checkLosers() {
@@ -572,8 +573,8 @@ int runMainLoop() {
                 const char *welcome = "01;Witaj! Wprowadź swój nick!: &";
                 int n = send(clientFd, welcome, strlen(welcome), 0);
                 if (n == -1 || n < static_cast<int>(strlen(welcome))) {
-                  perror("send handleClientInput: ");
-                  deletePlayer(clientFd);
+                    perror("send handleClientInput: ");
+                    deletePlayer(clientFd);
                 }
                 createScoreBoard();
             } else {
@@ -596,14 +597,14 @@ int runMainLoop() {
 
                     messageBuffers[clientFd] += string(buffer, bytesRead);
 
-    				size_t semicolonPos;
+                    size_t semicolonPos;
                     while ((semicolonPos = messageBuffers[clientFd].find(';')) != string::npos) {
-				        string message = messageBuffers[clientFd].substr(0, semicolonPos);
-						//cout<<message<<endl;
-        				messageBuffers[clientFd].erase(0, semicolonPos + 1);
+                        string message = messageBuffers[clientFd].substr(0, semicolonPos);
+                        //cout<<message<<endl;
+                        messageBuffers[clientFd].erase(0, semicolonPos + 1);
 
-        				handleClientInput(clientFd, message);
-    				}
+                        handleClientInput(clientFd, message);
+                    }
                 }
             }
         }
